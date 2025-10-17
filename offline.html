@@ -403,13 +403,15 @@
     // Game state
     let gameState = {
       players: [],
-      deck: [],
+      liarDeck: [],
       tableDeck: [],
-      currentRoundSuit: null,
+      currentTableCard: null,
       turnIndex: 0,
       phase: 'lobby', // lobby, playing, reveal, ended
       tableCards: [],
-      lastPlayed: null
+      lastPlayed: null,
+      roundNumber: 1,
+      firstPlayOfRound: true
     };
 
     const CARD_RANKS = ['K', 'Q', 'A', 'JOKER'];
@@ -419,7 +421,7 @@
       hard: { bluffChance: 0.45, liarChance: 0.6, randomness: 0.7 }
     };
 
-    function createDeck() {
+    function createLiarDeck() {
       const deck = [];
       // 6 of each K, Q, A
       for (const rank of ['K', 'Q', 'A']) {
@@ -434,6 +436,16 @@
       return shuffle(deck);
     }
 
+    function createTableDeck() {
+      // Table deck: 1 King, 1 Queen, 1 Ace
+      return shuffle(['K', 'Q', 'A']);
+    }
+
+    function createRevolverDeck() {
+      // Revolver deck: 1 Lethal, 5 Blank (6-chamber with 1 bullet)
+      return shuffle(['LETHAL', 'BLANK', 'BLANK', 'BLANK', 'BLANK', 'BLANK']);
+    }
+
     function shuffle(array) {
       const arr = [...array];
       for (let i = arr.length - 1; i > 0; i--) {
@@ -441,10 +453,6 @@
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
       return arr;
-    }
-
-    function createTableDeck() {
-      return shuffle(['K', 'Q', 'A', 'JOKER']);
     }
 
     function startGame() {
@@ -457,7 +465,14 @@
 
       // Create players
       gameState.players = [
-        { id: 'player', name: playerName, hand: [], isBot: false, eliminated: false }
+        { 
+          id: 'player', 
+          name: playerName, 
+          hand: [], 
+          isBot: false, 
+          eliminated: false,
+          revolverDeck: createRevolverDeck()
+        }
       ];
       
       for (let i = 0; i < botCount; i++) {
@@ -467,23 +482,26 @@
           hand: [],
           isBot: true,
           difficulty,
-          eliminated: false
+          eliminated: false,
+          revolverDeck: createRevolverDeck()
         });
       }
 
       // Setup game
-      gameState.deck = createDeck();
+      gameState.liarDeck = createLiarDeck();
       gameState.tableDeck = createTableDeck();
-      gameState.currentRoundSuit = gameState.tableDeck.pop();
+      gameState.currentTableCard = gameState.tableDeck.pop();
       gameState.turnIndex = 0;
       gameState.phase = 'playing';
       gameState.tableCards = [];
+      gameState.roundNumber = 1;
+      gameState.firstPlayOfRound = true;
 
       // Deal cards (5 cards to each player)
       for (let round = 0; round < 5; round++) {
         for (const player of gameState.players) {
-          if (gameState.deck.length > 0) {
-            const card = gameState.deck.pop();
+          if (gameState.liarDeck.length > 0) {
+            const card = gameState.liarDeck.pop();
             player.hand.push(card);
           }
         }
@@ -507,7 +525,7 @@
       const alivePlayers = gameState.players.filter(p => !p.eliminated);
       const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
       
-      document.getElementById('roundSuit').textContent = gameState.currentRoundSuit || '-';
+      document.getElementById('roundSuit').textContent = gameState.currentTableCard || '-';
       document.getElementById('phase').textContent = gameState.phase;
 
       // Update players display around the table
@@ -569,7 +587,7 @@
           controlsDiv.innerHTML = `
             <label style="color: #a0aec0; margin-right: 10px;">Declare suit:</label>
             <select id="suitSelect" onchange="declaredSuit = this.value">
-              <option value="">Round Suit (${gameState.currentRoundSuit})</option>
+              <option value="">Table Card (${gameState.currentTableCard})</option>
               <option value="K">King</option>
               <option value="Q">Queen</option>
               <option value="A">Ace</option>
@@ -582,7 +600,7 @@
 
         // Update LIAR button
         const liarBtn = document.getElementById('liarBtn');
-        const canCallLiar = gameState.phase === 'reveal' && isRightPlayer('player');
+        const canCallLiar = gameState.phase === 'reveal' && !gameState.firstPlayOfRound;
         liarBtn.disabled = !canCallLiar;
       } else {
         document.getElementById('yourHand').classList.add('hidden');
@@ -629,7 +647,7 @@
           gameState.tableCards.push({
             playerId: 'player',
             cardId: playedCard.id,
-            declared: declaredSuit || gameState.currentRoundSuit
+            declared: declaredSuit || gameState.currentTableCard
           });
         }
       });
@@ -637,6 +655,7 @@
       selectedCards = [];
       declaredSuit = null;
       gameState.phase = 'reveal';
+      gameState.firstPlayOfRound = false;
       updateUI();
       
       // Bot can call liar after a delay
@@ -648,7 +667,8 @@
     }
 
     function callLiar() {
-      if (gameState.phase !== 'reveal' || !isRightPlayer('player')) return;
+      // Can only call LIAR if it's not the first play of the round
+      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
       resolveLiarCall('player');
     }
 
@@ -666,24 +686,27 @@
       const declared = lastPlay.declared;
       const actual = gameState.lastPlayed.rank;
       
-      // Check if it was truth or bluff
-      const isTruth = actual === declared || actual === 'JOKER' || gameState.currentRoundSuit === 'JOKER';
+      // Check if it was truth or bluff (Jokers count as matching table card)
+      const isTruth = actual === declared || actual === 'JOKER' || declared === gameState.currentTableCard;
       const spinner = isTruth ? callerId : lastPlay.playerId;
       
       console.log(`LIAR call resolved: ${isTruth ? 'TRUTH' : 'BLUFF'}, ${spinner} spins the revolver`);
       
-      // Spin the revolver (1/6 chance of elimination)
-      const eliminated = Math.floor(Math.random() * 6) === 0;
+      // Get the spinner's revolver deck and draw the top card
+      const spinnerPlayer = gameState.players.find(p => p.id === spinner);
+      if (!spinnerPlayer || spinnerPlayer.revolverDeck.length === 0) return;
+      
+      const revolverCard = spinnerPlayer.revolverDeck.pop();
+      const eliminated = revolverCard === 'LETHAL';
+      
+      console.log(`${spinnerPlayer.name} drew: ${revolverCard}`);
       
       // Show revolver spin animation
-      showRevolverSpin(spinner, eliminated);
+      showRevolverSpin(spinner, eliminated, revolverCard);
       
       if (eliminated) {
-        const player = gameState.players.find(p => p.id === spinner);
-        if (player) {
-          player.eliminated = true;
-          console.log(`${player.name} was eliminated by the revolver!`);
-        }
+        spinnerPlayer.eliminated = true;
+        console.log(`${spinnerPlayer.name} was eliminated by the revolver!`);
         
         // Check for winner
         const survivors = gameState.players.filter(p => !p.eliminated);
@@ -693,23 +716,12 @@
           console.log(`Game over! ${survivors[0].name} wins!`);
         }
       } else {
-        console.log(`${spinner} survived the revolver spin`);
+        console.log(`${spinnerPlayer.name} survived the revolver spin`);
       }
 
-      // Advance turn
+      // Start new round after resolution
       if (gameState.phase !== 'ended') {
-        gameState.phase = 'playing';
-        gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
-        
-        // Check if all hands are empty (end of round)
-        const allEmpty = gameState.players.filter(p => !p.eliminated).every(p => p.hand.length === 0);
-        if (allEmpty) {
-          // If multiple players have empty hands, the last one to play wins
-          const lastPlayer = gameState.players[gameState.turnIndex - 1];
-          gameState.winnerId = lastPlayer.id;
-          gameState.phase = 'ended';
-          console.log(`Round ended - all hands empty! ${lastPlayer.name} wins!`);
-        }
+        startNewRound();
       }
 
       updateUI();
@@ -718,6 +730,25 @@
       if (gameState.phase === 'playing') {
         setTimeout(() => botTurn(), 1000);
       }
+    }
+
+    function startNewRound() {
+      gameState.roundNumber++;
+      gameState.firstPlayOfRound = true;
+      gameState.phase = 'playing';
+      gameState.tableCards = [];
+      gameState.lastPlayed = null;
+      
+      // Set new table card for the round
+      if (gameState.tableDeck.length > 0) {
+        gameState.currentTableCard = gameState.tableDeck.pop();
+      } else {
+        // If table deck is empty, reshuffle
+        gameState.tableDeck = createTableDeck();
+        gameState.currentTableCard = gameState.tableDeck.pop();
+      }
+      
+      console.log(`Round ${gameState.roundNumber} starting with table card: ${gameState.currentTableCard}`);
     }
 
     function botTurn() {
@@ -810,16 +841,16 @@
     }
 
     function botCallLiar() {
-      if (gameState.phase !== 'reveal') return;
+      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
       
+      // Any player can call LIAR (not just right player)
       const alivePlayers = gameState.players.filter(p => !p.eliminated);
-      const currentIndex = alivePlayers.findIndex(p => p.id === gameState.players[gameState.turnIndex % gameState.players.length].id);
-      const rightIndex = (currentIndex + 1) % alivePlayers.length;
-      const rightPlayer = alivePlayers[rightIndex];
+      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
       
-      if (!rightPlayer || !rightPlayer.isBot) return;
+      // Check if current player is a bot and can call LIAR
+      if (!currentPlayer || !currentPlayer.isBot) return;
 
-      const settings = DIFFICULTY_SETTINGS[rightPlayer.difficulty];
+      const settings = DIFFICULTY_SETTINGS[currentPlayer.difficulty];
       
       // Add more randomness to liar calls
       let liarChance = settings.liarChance;
@@ -836,8 +867,8 @@
       const shouldCallLiar = Math.random() < liarChance;
       
       if (shouldCallLiar) {
-        console.log(`${rightPlayer.name} calls LIAR!`);
-        resolveLiarCall(rightPlayer.id);
+        console.log(`${currentPlayer.name} calls LIAR!`);
+        resolveLiarCall(currentPlayer.id);
       } else {
         // No liar call, continue to next turn
         gameState.phase = 'playing';
@@ -847,7 +878,7 @@
       }
     }
 
-    function showRevolverSpin(spinnerId, eliminated) {
+    function showRevolverSpin(spinnerId, eliminated, revolverCard) {
       const spinner = gameState.players.find(p => p.id === spinnerId);
       if (!spinner) return;
       
@@ -873,6 +904,7 @@
         <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; border: 2px solid ${eliminated ? '#ff4444' : '#44ff44'};">
           <div style="font-size: 48px; margin-bottom: 20px;">🔫</div>
           <div>${spinner.name} spins the revolver...</div>
+          <div style="margin-top: 10px; font-size: 16px; color: #ccc;">Drew: ${revolverCard}</div>
           <div style="margin-top: 20px; font-size: 32px; color: ${eliminated ? '#ff4444' : '#44ff44'};">
             ${eliminated ? '💀 ELIMINATED!' : '✅ SURVIVED!'}
           </div>
@@ -890,13 +922,15 @@
     function resetGame() {
       gameState = {
         players: [],
-        deck: [],
+        liarDeck: [],
         tableDeck: [],
-        currentRoundSuit: null,
+        currentTableCard: null,
         turnIndex: 0,
         phase: 'lobby',
         tableCards: [],
-        lastPlayed: null
+        lastPlayed: null,
+        roundNumber: 1,
+        firstPlayOfRound: true
       };
       
       selectedCards = [];
