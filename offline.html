@@ -766,7 +766,23 @@
         gameState.currentTableCard = gameState.tableDeck.pop();
       }
       
+      // Deal 5 new cards to each player for the new round
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      for (const player of alivePlayers) {
+        player.hand = []; // Clear old hand
+        for (let i = 0; i < 5; i++) {
+          if (gameState.liarDeck.length === 0) {
+            // Reshuffle the liar deck if it's empty
+            gameState.liarDeck = createLiarDeck();
+            console.log('Reshuffled liar deck');
+          }
+          const card = gameState.liarDeck.pop();
+          player.hand.push(card);
+        }
+      }
+      
       console.log(`Round ${gameState.roundNumber} starting with table card: ${gameState.currentTableCard}`);
+      console.log('Dealt 5 new cards to each player');
     }
 
     function botTurn() {
