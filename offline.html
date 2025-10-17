@@ -526,7 +526,7 @@
       const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
       
       document.getElementById('roundSuit').textContent = gameState.currentTableCard || '-';
-      document.getElementById('phase').textContent = gameState.phase;
+      document.getElementById('phase').textContent = `${gameState.phase} (Round ${gameState.roundNumber})`;
 
       // Update players display around the table
       const playersDiv = document.getElementById('players');
@@ -598,7 +598,7 @@
           handDiv.appendChild(controlsDiv);
         }
 
-        // Update LIAR button
+        // Update LIAR button - can call LIAR if not first play of round
         const liarBtn = document.getElementById('liarBtn');
         const canCallLiar = gameState.phase === 'reveal' && !gameState.firstPlayOfRound;
         liarBtn.disabled = !canCallLiar;
@@ -672,12 +672,6 @@
       resolveLiarCall('player');
     }
 
-    function isRightPlayer(playerId) {
-      const alivePlayers = gameState.players.filter(p => !p.eliminated);
-      const currentIndex = alivePlayers.findIndex(p => p.id === gameState.players[gameState.turnIndex % gameState.players.length].id);
-      const rightIndex = (currentIndex + 1) % alivePlayers.length;
-      return alivePlayers[rightIndex]?.id === playerId;
-    }
 
     function resolveLiarCall(callerId) {
       if (!gameState.lastPlayed) return;
@@ -774,10 +768,16 @@
       if (gameState.phase === 'playing') {
         // Bot plays cards
         const bot = currentPlayer;
-        if (bot.hand.length === 0) return;
+        if (bot.hand.length === 0) {
+          // Skip turn if no cards
+          gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
+          updateUI();
+          setTimeout(() => botTurn(), 1000);
+          return;
+        }
 
         const settings = DIFFICULTY_SETTINGS[bot.difficulty];
-        const roundSuit = gameState.currentRoundSuit;
+        const tableCard = gameState.currentTableCard;
         
         // Determine how many cards to play (1-3, with randomness)
         const maxCards = Math.min(3, bot.hand.length);
@@ -786,7 +786,7 @@
         
         // Select cards to play
         const cardsToPlay = [];
-        const matchingCards = bot.hand.filter(c => c.rank === roundSuit || c.rank === 'JOKER');
+        const matchingCards = bot.hand.filter(c => c.rank === tableCard || c.rank === 'JOKER');
         
         // Prefer matching cards, but add randomness
         if (matchingCards.length > 0 && Math.random() > settings.randomness) {
@@ -810,8 +810,8 @@
             
             // Bot declares suit (can bluff based on difficulty)
             const shouldBluff = Math.random() < settings.bluffChance;
-            const declared = shouldBluff && playedCard.rank !== roundSuit ? 
-              CARD_RANKS[Math.floor(Math.random() * 3)] : roundSuit;
+            const declared = shouldBluff && playedCard.rank !== tableCard ? 
+              CARD_RANKS[Math.floor(Math.random() * 3)] : tableCard;
             
             gameState.tableCards.push({
               playerId: bot.id,
@@ -822,11 +822,12 @@
         });
 
         gameState.phase = 'reveal';
+        gameState.firstPlayOfRound = false;
         updateUI();
         
         // Check if player can call liar
         setTimeout(() => {
-          if (gameState.phase === 'reveal' && isLeftPlayer('player')) {
+          if (gameState.phase === 'reveal' && !gameState.firstPlayOfRound) {
             // Player can call liar - wait for their input
             return;
           } else {
@@ -843,39 +844,40 @@
     function botCallLiar() {
       if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
       
-      // Any player can call LIAR (not just right player)
+      // Any player can call LIAR - check all bots
       const alivePlayers = gameState.players.filter(p => !p.eliminated);
-      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
       
-      // Check if current player is a bot and can call LIAR
-      if (!currentPlayer || !currentPlayer.isBot) return;
-
-      const settings = DIFFICULTY_SETTINGS[currentPlayer.difficulty];
-      
-      // Add more randomness to liar calls
-      let liarChance = settings.liarChance;
-      
-      // Random factor that can make bots more or less aggressive
-      const randomFactor = (Math.random() - 0.5) * settings.randomness;
-      liarChance = Math.max(0, Math.min(1, liarChance + randomFactor));
-      
-      // Sometimes bots make completely random decisions
-      if (Math.random() < settings.randomness * 0.3) {
-        liarChance = Math.random();
+      for (const player of alivePlayers) {
+        if (!player.isBot) continue;
+        
+        const settings = DIFFICULTY_SETTINGS[player.difficulty];
+        
+        // Add more randomness to liar calls
+        let liarChance = settings.liarChance;
+        
+        // Random factor that can make bots more or less aggressive
+        const randomFactor = (Math.random() - 0.5) * settings.randomness;
+        liarChance = Math.max(0, Math.min(1, liarChance + randomFactor));
+        
+        // Sometimes bots make completely random decisions
+        if (Math.random() < settings.randomness * 0.3) {
+          liarChance = Math.random();
+        }
+        
+        const shouldCallLiar = Math.random() < liarChance;
+        
+        if (shouldCallLiar) {
+          console.log(`${player.name} calls LIAR!`);
+          resolveLiarCall(player.id);
+          return;
+        }
       }
       
-      const shouldCallLiar = Math.random() < liarChance;
-      
-      if (shouldCallLiar) {
-        console.log(`${currentPlayer.name} calls LIAR!`);
-        resolveLiarCall(currentPlayer.id);
-      } else {
-        // No liar call, continue to next turn
-        gameState.phase = 'playing';
-        gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
-        updateUI();
-        setTimeout(() => botTurn(), 1000);
-      }
+      // No bot called LIAR, continue to next turn
+      gameState.phase = 'playing';
+      gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
+      updateUI();
+      setTimeout(() => botTurn(), 1000);
     }
 
     function showRevolverSpin(spinnerId, eliminated, revolverCard) {
