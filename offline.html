@@ -448,9 +448,12 @@
     }
 
     function startGame() {
+      console.log('Starting game...');
       const playerName = document.getElementById('playerName').value || 'You';
       const botCount = parseInt(document.getElementById('botCount').value);
       const difficulty = document.getElementById('difficulty').value;
+      
+      console.log('Game settings:', { playerName, botCount, difficulty });
 
       // Create players
       gameState.players = [
@@ -476,20 +479,28 @@
       gameState.phase = 'playing';
       gameState.tableCards = [];
 
-      // Deal cards
+      // Deal cards (5 cards to each player)
       for (let round = 0; round < 5; round++) {
         for (const player of gameState.players) {
-          const card = gameState.deck.pop();
-          if (card) player.hand.push(card);
+          if (gameState.deck.length > 0) {
+            const card = gameState.deck.pop();
+            player.hand.push(card);
+          }
         }
       }
+      
+      console.log('Game started:', gameState.players.map(p => ({ name: p.name, cards: p.hand.length })));
 
       document.getElementById('setup').classList.add('hidden');
       document.getElementById('game').classList.remove('hidden');
       updateUI();
       
       // Start bot turns if needed
-      setTimeout(() => botTurn(), 1000);
+      console.log('Starting game, current player:', currentPlayer?.name);
+      setTimeout(() => {
+        console.log('Bot turn starting...');
+        botTurn();
+      }, 1000);
     }
 
     function updateUI() {
@@ -498,7 +509,6 @@
       
       document.getElementById('roundSuit').textContent = gameState.currentRoundSuit || '-';
       document.getElementById('phase').textContent = gameState.phase;
-      document.getElementById('currentPlayer').textContent = currentPlayer?.name || '-';
 
       // Update players display around the table
       const playersDiv = document.getElementById('players');
@@ -697,12 +707,24 @@
     }
 
     function botTurn() {
-      if (gameState.phase === 'ended') return;
+      if (gameState.phase === 'ended') {
+        console.log('Game ended, stopping bot turn');
+        return;
+      }
       
       const alivePlayers = gameState.players.filter(p => !p.eliminated);
       const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
       
-      if (!currentPlayer.isBot) return;
+      console.log('Bot turn check:', { 
+        currentPlayer: currentPlayer?.name, 
+        isBot: currentPlayer?.isBot, 
+        phase: gameState.phase 
+      });
+      
+      if (!currentPlayer || !currentPlayer.isBot) {
+        console.log('Not a bot turn, stopping');
+        return;
+      }
 
       if (gameState.phase === 'playing') {
         // Bot plays cards
