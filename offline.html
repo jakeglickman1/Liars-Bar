@@ -386,6 +386,7 @@
       <div class="hand-cards" id="hand"></div>
       <div class="game-controls">
         <button class="btn danger" id="liarBtn" onclick="callLiar()" disabled>Call LIAR!</button>
+        <button class="btn" id="continueBtn" onclick="continueGame()" style="display:none;">Continue</button>
       </div>
     </div>
   </div>
@@ -602,6 +603,19 @@
         const liarBtn = document.getElementById('liarBtn');
         const canCallLiar = gameState.phase === 'reveal' && !gameState.firstPlayOfRound;
         liarBtn.disabled = !canCallLiar;
+        
+        // Show LIAR button when someone can call (optional)
+        const continueBtn = document.getElementById('continueBtn');
+        if (canCallLiar) {
+          liarBtn.style.display = 'block';
+          liarBtn.style.fontSize = '16px';
+          liarBtn.style.padding = '10px 20px';
+          liarBtn.textContent = 'Call LIAR!';
+          continueBtn.style.display = 'block';
+        } else {
+          liarBtn.style.display = 'none';
+          continueBtn.style.display = 'none';
+        }
       } else {
         document.getElementById('yourHand').classList.add('hidden');
       }
@@ -670,6 +684,16 @@
       // Can only call LIAR if it's not the first play of the round
       if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
       resolveLiarCall('player');
+    }
+
+    function continueGame() {
+      // Continue to next turn without calling LIAR
+      if (gameState.phase !== 'reveal') return;
+      
+      gameState.phase = 'playing';
+      gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
+      updateUI();
+      setTimeout(() => botTurn(), 1000);
     }
 
 
@@ -825,13 +849,10 @@
         gameState.firstPlayOfRound = false;
         updateUI();
         
-        // Check if player can call liar
+        // Wait for potential LIAR calls
         setTimeout(() => {
-          if (gameState.phase === 'reveal' && !gameState.firstPlayOfRound) {
-            // Player can call liar - wait for their input
-            return;
-          } else {
-            // Bot calls liar or continues
+          if (gameState.phase === 'reveal') {
+            // Check if any bot wants to call LIAR
             botCallLiar();
           }
         }, 2000);
@@ -842,7 +863,16 @@
     }
 
     function botCallLiar() {
-      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
+      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) {
+        // If no one can call LIAR, continue to next turn
+        if (gameState.phase === 'reveal' && gameState.firstPlayOfRound) {
+          gameState.phase = 'playing';
+          gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
+          updateUI();
+          setTimeout(() => botTurn(), 1000);
+        }
+        return;
+      }
       
       // Any player can call LIAR - check all bots
       const alivePlayers = gameState.players.filter(p => !p.eliminated);
