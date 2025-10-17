@@ -1,0 +1,993 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Last Call Roulette - Offline</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+      background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+      color: #e2e8f0; 
+      margin: 0; 
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+    }
+    
+    .game-table {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at center, #2d5016 0%, #1a3d0a 70%, #0f1f05 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .table-surface {
+      position: relative;
+      width: 90vmin;
+      height: 60vmin;
+      background: radial-gradient(ellipse at center, #1a3d0a 0%, #0f1f05 100%);
+      border: 8px solid #8b4513;
+      border-radius: 50%;
+      box-shadow: 
+        inset 0 0 50px rgba(0,0,0,0.5),
+        0 0 30px rgba(0,0,0,0.8),
+        0 0 0 4px #654321;
+    }
+    
+    .table-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+    }
+    
+    .round-suit {
+      background: rgba(0,0,0,0.8);
+      color: #ffd700;
+      padding: 12px 20px;
+      border-radius: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      border: 2px solid #ffd700;
+      box-shadow: 0 0 20px rgba(255,215,0,0.3);
+    }
+    
+    .phase-indicator {
+      background: rgba(0,0,0,0.6);
+      color: #00ff88;
+      padding: 8px 16px;
+      border-radius: 15px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .player-seat {
+      position: absolute;
+      width: 80px;
+      height: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+    
+    .player-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: white;
+      border: 3px solid #4a5568;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      margin-bottom: 5px;
+    }
+    
+    .player-avatar.current {
+      border-color: #00ff88;
+      box-shadow: 0 0 20px rgba(0,255,136,0.5);
+      animation: pulse 2s infinite;
+    }
+    
+    .player-avatar.eliminated {
+      opacity: 0.3;
+      filter: grayscale(100%);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .player-name {
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      min-width: 60px;
+    }
+    
+    .player-cards {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 2px;
+    }
+    
+    .card-count {
+      background: rgba(0,0,0,0.9);
+      color: #ffd700;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    
+    /* Position players around the table */
+    .player-seat:nth-child(1) { top: 20px; left: 50%; transform: translateX(-50%); }
+    .player-seat:nth-child(2) { top: 50%; right: 20px; transform: translateY(-50%); }
+    .player-seat:nth-child(3) { bottom: 20px; left: 50%; transform: translateX(-50%); }
+    .player-seat:nth-child(4) { top: 50%; left: 20px; transform: translateY(-50%); }
+    .player-seat:nth-child(5) { top: 15%; right: 25%; }
+    .player-seat:nth-child(6) { bottom: 15%; right: 25%; }
+    .player-seat:nth-child(7) { bottom: 15%; left: 25%; }
+    .player-seat:nth-child(8) { top: 15%; left: 25%; }
+    
+    /* Your hand at the bottom */
+    .your-hand {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.9);
+      padding: 20px;
+      border-radius: 20px;
+      border: 2px solid #4a5568;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    
+    .hand-cards {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      justify-content: center;
+    }
+    
+    .playing-card {
+      width: 60px;
+      height: 84px;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      border: 2px solid #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+      color: #333;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .playing-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    }
+    
+    .playing-card.selected {
+      background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+      color: white;
+      transform: translateY(-10px);
+      box-shadow: 0 10px 20px rgba(0,255,136,0.4);
+    }
+    
+    .playing-card:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .playing-card:disabled:hover {
+      transform: none;
+    }
+    
+    .game-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+    }
+    
+    .btn.danger {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+      box-shadow: 0 4px 15px rgba(255,107,107,0.3);
+    }
+    
+    .btn.danger:hover {
+      box-shadow: 0 6px 20px rgba(255,107,107,0.4);
+    }
+    
+    .btn:disabled {
+      background: #64748b;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    select {
+      background: rgba(0,0,0,0.8);
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 15px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+    
+    /* Setup screen */
+    .setup-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .setup-card {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 40px;
+      border-radius: 20px;
+      border: 2px solid #4a5568;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 500px;
+    }
+    
+    .setup-card h1 {
+      color: #ffd700;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+    
+    .setup-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    
+    input {
+      background: rgba(0,0,0,0.8);
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 15px;
+      padding: 12px 16px;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    
+    .hidden { display: none !important; }
+    
+    /* Game over screen */
+    .game-over {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .game-over-card {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 40px;
+      border-radius: 20px;
+      border: 2px solid #ffd700;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 400px;
+    }
+    
+    .game-over-card h2 {
+      color: #ffd700;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Setup Screen -->
+  <div id="setup" class="setup-screen">
+    <div class="setup-card">
+      <h1>🎲 Last Call Roulette</h1>
+      <p style="color: #a0aec0; margin-bottom: 30px;">Play against AI bots at the poker table</p>
+      
+      <div class="setup-controls">
+        <input id="playerName" placeholder="Your name" value="You">
+        <select id="botCount">
+          <option value="1">1 Bot</option>
+          <option value="2" selected>2 Bots</option>
+          <option value="3">3 Bots</option>
+          <option value="4">4 Bots</option>
+        </select>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      
+      <button class="btn" onclick="startGame()" style="font-size: 18px; padding: 15px 30px;">Join the Table</button>
+    </div>
+  </div>
+
+  <!-- Game Table -->
+  <div id="game" class="game-table hidden">
+    <div class="table-surface">
+      <!-- Table Center Info -->
+      <div class="table-center">
+        <div class="round-suit">Round Suit: <span id="roundSuit">-</span></div>
+        <div class="phase-indicator">Phase: <span id="phase">-</span></div>
+      </div>
+      
+      <!-- Player Seats -->
+      <div id="players"></div>
+    </div>
+    
+    <!-- Your Hand -->
+    <div id="yourHand" class="your-hand hidden">
+      <div class="hand-cards" id="hand"></div>
+      <div class="game-controls">
+        <button class="btn danger" id="liarBtn" onclick="callLiar()" disabled>Call LIAR!</button>
+        <button class="btn" id="continueBtn" onclick="continueGame()" style="display:none;">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="gameOver" class="game-over hidden">
+    <div class="game-over-card">
+      <h2>🎉 Game Over!</h2>
+      <p id="winnerText" style="color: #a0aec0; margin-bottom: 30px;"></p>
+      <button class="btn" onclick="resetGame()">New Game</button>
+    </div>
+  </div>
+
+  <script>
+    // Game state
+    let gameState = {
+      players: [],
+      liarDeck: [],
+      tableDeck: [],
+      currentTableCard: null,
+      turnIndex: 0,
+      phase: 'lobby', // lobby, playing, reveal, ended
+      tableCards: [],
+      lastPlayed: null,
+      roundNumber: 1,
+      firstPlayOfRound: true
+    };
+
+    const CARD_RANKS = ['K', 'Q', 'A', 'JOKER'];
+    const DIFFICULTY_SETTINGS = {
+      easy: { bluffChance: 0.1, liarChance: 0.15, randomness: 0.3 },
+      normal: { bluffChance: 0.25, liarChance: 0.35, randomness: 0.5 },
+      hard: { bluffChance: 0.45, liarChance: 0.6, randomness: 0.7 }
+    };
+
+    function createLiarDeck() {
+      const deck = [];
+      // 6 of each K, Q, A
+      for (const rank of ['K', 'Q', 'A']) {
+        for (let i = 0; i < 6; i++) {
+          deck.push({ id: Math.random().toString(36), rank });
+        }
+      }
+      // 2 Jokers
+      for (let i = 0; i < 2; i++) {
+        deck.push({ id: Math.random().toString(36), rank: 'JOKER' });
+      }
+      return shuffle(deck);
+    }
+
+    function createTableDeck() {
+      // Table deck: 1 King, 1 Queen, 1 Ace
+      return shuffle(['K', 'Q', 'A']);
+    }
+
+    function createRevolverDeck() {
+      // Revolver deck: 1 Lethal, 5 Blank (6-chamber with 1 bullet)
+      return shuffle(['LETHAL', 'BLANK', 'BLANK', 'BLANK', 'BLANK', 'BLANK']);
+    }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function startGame() {
+      console.log('Starting game...');
+      const playerName = document.getElementById('playerName').value || 'You';
+      const botCount = parseInt(document.getElementById('botCount').value);
+      const difficulty = document.getElementById('difficulty').value;
+      
+      console.log('Game settings:', { playerName, botCount, difficulty });
+
+      // Create players
+      gameState.players = [
+        { 
+          id: 'player', 
+          name: playerName, 
+          hand: [], 
+          isBot: false, 
+          eliminated: false,
+          revolverDeck: createRevolverDeck()
+        }
+      ];
+      
+      for (let i = 0; i < botCount; i++) {
+        gameState.players.push({
+          id: `bot${i}`,
+          name: `Bot-${['Fox', 'Wolf', 'Bear', 'Hawk'][i] || 'Bot'}`,
+          hand: [],
+          isBot: true,
+          difficulty,
+          eliminated: false,
+          revolverDeck: createRevolverDeck()
+        });
+      }
+
+      // Setup game
+      gameState.liarDeck = createLiarDeck();
+      gameState.tableDeck = createTableDeck();
+      gameState.currentTableCard = gameState.tableDeck.pop();
+      gameState.turnIndex = 0;
+      gameState.phase = 'playing';
+      gameState.tableCards = [];
+      gameState.roundNumber = 1;
+      gameState.firstPlayOfRound = true;
+
+      // Deal cards (5 cards to each player)
+      for (let round = 0; round < 5; round++) {
+        for (const player of gameState.players) {
+          if (gameState.liarDeck.length > 0) {
+            const card = gameState.liarDeck.pop();
+            player.hand.push(card);
+          }
+        }
+      }
+      
+      console.log('Game started:', gameState.players.map(p => ({ name: p.name, cards: p.hand.length })));
+
+      document.getElementById('setup').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+      updateUI();
+      
+      // Start bot turns if needed
+      console.log('Starting game, current player:', currentPlayer?.name);
+      setTimeout(() => {
+        console.log('Bot turn starting...');
+        botTurn();
+      }, 1000);
+    }
+
+    function updateUI() {
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
+      
+      document.getElementById('roundSuit').textContent = gameState.currentTableCard || '-';
+      document.getElementById('phase').textContent = `${gameState.phase} (Round ${gameState.roundNumber})`;
+
+      // Update players display around the table
+      const playersDiv = document.getElementById('players');
+      playersDiv.innerHTML = '';
+      gameState.players.forEach((player, index) => {
+        const seat = document.createElement('div');
+        seat.className = 'player-seat';
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'player-avatar';
+        if (currentPlayer && player.id === currentPlayer.id) avatar.classList.add('current');
+        if (player.eliminated) avatar.classList.add('eliminated');
+        avatar.textContent = player.name.charAt(0).toUpperCase();
+        
+        const name = document.createElement('div');
+        name.className = 'player-name';
+        name.textContent = player.name;
+        
+        const cardCount = document.createElement('div');
+        cardCount.className = 'card-count';
+        cardCount.textContent = player.hand.length;
+        
+        const cards = document.createElement('div');
+        cards.className = 'player-cards';
+        cards.appendChild(cardCount);
+        
+        seat.appendChild(avatar);
+        seat.appendChild(name);
+        seat.appendChild(cards);
+        playersDiv.appendChild(seat);
+      });
+
+      // Update your hand
+      const player = gameState.players.find(p => p.id === 'player');
+      if (player && !player.eliminated) {
+        document.getElementById('yourHand').classList.remove('hidden');
+        const handDiv = document.getElementById('hand');
+        handDiv.innerHTML = '';
+        
+        player.hand.forEach(card => {
+          const cardEl = document.createElement('div');
+          const isSelected = selectedCards.find(c => c.id === card.id);
+          cardEl.className = 'playing-card';
+          if (isSelected) cardEl.classList.add('selected');
+          cardEl.textContent = card.rank;
+          cardEl.disabled = gameState.phase !== 'playing' || currentPlayer.id !== 'player';
+          if (!cardEl.disabled) {
+            cardEl.onclick = () => playCard(card);
+          }
+          handDiv.appendChild(cardEl);
+        });
+
+        // Add suit selection and confirm button
+        if (gameState.phase === 'playing' && currentPlayer.id === 'player' && selectedCards.length > 0) {
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'game-controls';
+          controlsDiv.style.marginTop = '15px';
+          controlsDiv.innerHTML = `
+            <label style="color: #a0aec0; margin-right: 10px;">Declare suit:</label>
+            <select id="suitSelect" onchange="declaredSuit = this.value">
+              <option value="">Table Card (${gameState.currentTableCard})</option>
+              <option value="K">King</option>
+              <option value="Q">Queen</option>
+              <option value="A">Ace</option>
+              <option value="JOKER">Joker</option>
+            </select>
+            <button class="btn" onclick="confirmPlay()">Play ${selectedCards.length} Card${selectedCards.length > 1 ? 's' : ''}</button>
+          `;
+          handDiv.appendChild(controlsDiv);
+        }
+
+        // Update LIAR button - can call LIAR if not first play of round
+        const liarBtn = document.getElementById('liarBtn');
+        const canCallLiar = gameState.phase === 'reveal' && !gameState.firstPlayOfRound;
+        liarBtn.disabled = !canCallLiar;
+        
+        // Show LIAR button when someone can call (optional)
+        const continueBtn = document.getElementById('continueBtn');
+        if (canCallLiar) {
+          liarBtn.style.display = 'block';
+          liarBtn.style.fontSize = '16px';
+          liarBtn.style.padding = '10px 20px';
+          liarBtn.textContent = 'Call LIAR!';
+          continueBtn.style.display = 'block';
+        } else {
+          liarBtn.style.display = 'none';
+          continueBtn.style.display = 'none';
+        }
+      } else {
+        document.getElementById('yourHand').classList.add('hidden');
+      }
+
+      // Check for game over
+      if (gameState.phase === 'ended') {
+        document.getElementById('gameOver').classList.remove('hidden');
+        const winner = gameState.players.find(p => p.id === gameState.winnerId);
+        document.getElementById('winnerText').textContent = `🎉 ${winner?.name} wins!`;
+      }
+    }
+
+    let selectedCards = [];
+    let declaredSuit = null;
+
+    function playCard(card) {
+      const player = gameState.players.find(p => p.id === 'player');
+      if (!player || gameState.phase !== 'playing') return;
+
+      // Toggle card selection
+      const cardIndex = selectedCards.findIndex(c => c.id === card.id);
+      if (cardIndex === -1) {
+        selectedCards.push(card);
+      } else {
+        selectedCards.splice(cardIndex, 1);
+      }
+      updateUI();
+    }
+
+    function confirmPlay() {
+      if (selectedCards.length === 0) return;
+      
+      const player = gameState.players.find(p => p.id === 'player');
+      if (!player || gameState.phase !== 'playing') return;
+
+      // Remove selected cards from hand
+      selectedCards.forEach(card => {
+        const cardIndex = player.hand.findIndex(c => c.id === card.id);
+        if (cardIndex !== -1) {
+          const playedCard = player.hand.splice(cardIndex, 1)[0];
+          gameState.lastPlayed = playedCard; // Store the last card for reveal
+          
+          gameState.tableCards.push({
+            playerId: 'player',
+            cardId: playedCard.id,
+            declared: declaredSuit || gameState.currentTableCard
+          });
+        }
+      });
+
+      selectedCards = [];
+      declaredSuit = null;
+      gameState.phase = 'reveal';
+      gameState.firstPlayOfRound = false;
+      updateUI();
+      
+      // Bot can call liar after a delay
+      setTimeout(() => {
+        if (gameState.phase === 'reveal') {
+          botCallLiar();
+        }
+      }, 2000);
+    }
+
+    function callLiar() {
+      // Can only call LIAR if it's not the first play of the round
+      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) return;
+      resolveLiarCall('player');
+    }
+
+    function continueGame() {
+      // Continue to next turn without calling LIAR
+      if (gameState.phase !== 'reveal') return;
+      
+      gameState.phase = 'playing';
+      gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
+      updateUI();
+      setTimeout(() => botTurn(), 1000);
+    }
+
+
+    function resolveLiarCall(callerId) {
+      if (!gameState.lastPlayed) return;
+
+      const lastPlay = gameState.tableCards[gameState.tableCards.length - 1];
+      const declared = lastPlay.declared;
+      const actual = gameState.lastPlayed.rank;
+      
+      // Check if it was truth or bluff (Jokers count as matching table card)
+      const isTruth = actual === declared || actual === 'JOKER' || declared === gameState.currentTableCard;
+      const spinner = isTruth ? callerId : lastPlay.playerId;
+      
+      console.log(`LIAR call resolved: ${isTruth ? 'TRUTH' : 'BLUFF'}, ${spinner} spins the revolver`);
+      
+      // Get the spinner's revolver deck and draw the top card
+      const spinnerPlayer = gameState.players.find(p => p.id === spinner);
+      if (!spinnerPlayer || spinnerPlayer.revolverDeck.length === 0) return;
+      
+      const revolverCard = spinnerPlayer.revolverDeck.pop();
+      const eliminated = revolverCard === 'LETHAL';
+      
+      console.log(`${spinnerPlayer.name} drew: ${revolverCard}`);
+      
+      // Show revolver spin animation
+      showRevolverSpin(spinner, eliminated, revolverCard);
+      
+      if (eliminated) {
+        spinnerPlayer.eliminated = true;
+        console.log(`${spinnerPlayer.name} was eliminated by the revolver!`);
+        
+        // Check for winner
+        const survivors = gameState.players.filter(p => !p.eliminated);
+        if (survivors.length === 1) {
+          gameState.winnerId = survivors[0].id;
+          gameState.phase = 'ended';
+          console.log(`Game over! ${survivors[0].name} wins!`);
+        }
+      } else {
+        console.log(`${spinnerPlayer.name} survived the revolver spin`);
+      }
+
+      // Start new round after resolution
+      if (gameState.phase !== 'ended') {
+        startNewRound();
+      }
+
+      updateUI();
+      
+      // Continue with bot turns
+      if (gameState.phase === 'playing') {
+        setTimeout(() => botTurn(), 1000);
+      }
+    }
+
+    function startNewRound() {
+      gameState.roundNumber++;
+      gameState.firstPlayOfRound = true;
+      gameState.phase = 'playing';
+      gameState.tableCards = [];
+      gameState.lastPlayed = null;
+      
+      // Set new table card for the round
+      if (gameState.tableDeck.length > 0) {
+        gameState.currentTableCard = gameState.tableDeck.pop();
+      } else {
+        // If table deck is empty, reshuffle
+        gameState.tableDeck = createTableDeck();
+        gameState.currentTableCard = gameState.tableDeck.pop();
+      }
+      
+      // Deal 5 new cards to each player for the new round
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      for (const player of alivePlayers) {
+        player.hand = []; // Clear old hand
+        for (let i = 0; i < 5; i++) {
+          if (gameState.liarDeck.length === 0) {
+            // Reshuffle the liar deck if it's empty
+            gameState.liarDeck = createLiarDeck();
+            console.log('Reshuffled liar deck');
+          }
+          const card = gameState.liarDeck.pop();
+          player.hand.push(card);
+        }
+      }
+      
+      console.log(`Round ${gameState.roundNumber} starting with table card: ${gameState.currentTableCard}`);
+      console.log('Dealt 5 new cards to each player');
+    }
+
+    function botTurn() {
+      if (gameState.phase === 'ended') {
+        console.log('Game ended, stopping bot turn');
+        return;
+      }
+      
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
+      
+      console.log('Bot turn check:', { 
+        currentPlayer: currentPlayer?.name, 
+        isBot: currentPlayer?.isBot, 
+        phase: gameState.phase 
+      });
+      
+      if (!currentPlayer || !currentPlayer.isBot) {
+        console.log('Not a bot turn, stopping');
+        return;
+      }
+
+      if (gameState.phase === 'playing') {
+        // Bot plays cards
+        const bot = currentPlayer;
+        if (bot.hand.length === 0) {
+          // Skip turn if no cards
+          gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
+          updateUI();
+          setTimeout(() => botTurn(), 1000);
+          return;
+        }
+
+        const settings = DIFFICULTY_SETTINGS[bot.difficulty];
+        const tableCard = gameState.currentTableCard;
+        
+        // Determine how many cards to play (1-3, with randomness)
+        const maxCards = Math.min(3, bot.hand.length);
+        const cardCount = Math.random() < settings.randomness ? 
+          Math.floor(Math.random() * maxCards) + 1 : 1;
+        
+        // Select cards to play
+        const cardsToPlay = [];
+        const matchingCards = bot.hand.filter(c => c.rank === tableCard || c.rank === 'JOKER');
+        
+        // Prefer matching cards, but add randomness
+        if (matchingCards.length > 0 && Math.random() > settings.randomness) {
+          cardsToPlay.push(...matchingCards.slice(0, Math.min(cardCount, matchingCards.length)));
+        }
+        
+        // Fill remaining slots with random cards
+        while (cardsToPlay.length < cardCount && cardsToPlay.length < bot.hand.length) {
+          const remainingCards = bot.hand.filter(c => !cardsToPlay.includes(c));
+          if (remainingCards.length > 0) {
+            cardsToPlay.push(remainingCards[Math.floor(Math.random() * remainingCards.length)]);
+          }
+        }
+        
+        // Play the selected cards
+        cardsToPlay.forEach(card => {
+          const cardIndex = bot.hand.findIndex(c => c.id === card.id);
+          if (cardIndex !== -1) {
+            const playedCard = bot.hand.splice(cardIndex, 1)[0];
+            gameState.lastPlayed = playedCard; // Store last card for reveal
+            
+            // Bot declares suit (can bluff based on difficulty)
+            const shouldBluff = Math.random() < settings.bluffChance;
+            const declared = shouldBluff && playedCard.rank !== tableCard ? 
+              CARD_RANKS[Math.floor(Math.random() * 3)] : tableCard;
+            
+            gameState.tableCards.push({
+              playerId: bot.id,
+              cardId: playedCard.id,
+              declared
+            });
+          }
+        });
+
+        gameState.phase = 'reveal';
+        gameState.firstPlayOfRound = false;
+        updateUI();
+        
+        // Wait for potential LIAR calls
+        setTimeout(() => {
+          if (gameState.phase === 'reveal') {
+            // Check if any bot wants to call LIAR
+            botCallLiar();
+          }
+        }, 2000);
+        
+      } else if (gameState.phase === 'reveal') {
+        botCallLiar();
+      }
+    }
+
+    function botCallLiar() {
+      if (gameState.phase !== 'reveal' || gameState.firstPlayOfRound) {
+        // If no one can call LIAR, continue to next turn
+        if (gameState.phase === 'reveal' && gameState.firstPlayOfRound) {
+          gameState.phase = 'playing';
+          gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
+          updateUI();
+          setTimeout(() => botTurn(), 1000);
+        }
+        return;
+      }
+      
+      // Any player can call LIAR - check all bots
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      
+      for (const player of alivePlayers) {
+        if (!player.isBot) continue;
+        
+        const settings = DIFFICULTY_SETTINGS[player.difficulty];
+        
+        // Add more randomness to liar calls
+        let liarChance = settings.liarChance;
+        
+        // Random factor that can make bots more or less aggressive
+        const randomFactor = (Math.random() - 0.5) * settings.randomness;
+        liarChance = Math.max(0, Math.min(1, liarChance + randomFactor));
+        
+        // Sometimes bots make completely random decisions
+        if (Math.random() < settings.randomness * 0.3) {
+          liarChance = Math.random();
+        }
+        
+        const shouldCallLiar = Math.random() < liarChance;
+        
+        if (shouldCallLiar) {
+          console.log(`${player.name} calls LIAR!`);
+          resolveLiarCall(player.id);
+          return;
+        }
+      }
+      
+      // No bot called LIAR, continue to next turn
+      gameState.phase = 'playing';
+      gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
+      updateUI();
+      setTimeout(() => botTurn(), 1000);
+    }
+
+    function showRevolverSpin(spinnerId, eliminated, revolverCard) {
+      const spinner = gameState.players.find(p => p.id === spinnerId);
+      if (!spinner) return;
+      
+      // Create revolver spin overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        font-size: 24px;
+        color: white;
+        text-align: center;
+      `;
+      
+      overlay.innerHTML = `
+        <div style="background: rgba(0,0,0,0.9); padding: 40px; border-radius: 20px; border: 2px solid ${eliminated ? '#ff4444' : '#44ff44'};">
+          <div style="font-size: 48px; margin-bottom: 20px;">🔫</div>
+          <div>${spinner.name} spins the revolver...</div>
+          <div style="margin-top: 10px; font-size: 16px; color: #ccc;">Drew: ${revolverCard}</div>
+          <div style="margin-top: 20px; font-size: 32px; color: ${eliminated ? '#ff4444' : '#44ff44'};">
+            ${eliminated ? '💀 ELIMINATED!' : '✅ SURVIVED!'}
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      // Remove overlay after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+      }, 3000);
+    }
+
+    function resetGame() {
+      gameState = {
+        players: [],
+        liarDeck: [],
+        tableDeck: [],
+        currentTableCard: null,
+        turnIndex: 0,
+        phase: 'lobby',
+        tableCards: [],
+        lastPlayed: null,
+        roundNumber: 1,
+        firstPlayOfRound: true
+      };
+      
+      selectedCards = [];
+      declaredSuit = null;
+      
+      document.getElementById('game').classList.add('hidden');
+      document.getElementById('setup').classList.remove('hidden');
+      document.getElementById('gameOver').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

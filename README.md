@@ -1,133 +1,76 @@
-# 🎲 Last Call Roulette
+# 🃏 Liar's Bar - Last Call Roulette
 
-A multiplayer web game combining Liar's Bar card game with Russian roulette mechanics. Play against AI bots or with friends in real-time!
+A production-quality multiplayer web app combining Liar's Bar card game with Russian Roulette mechanics.
 
-## 🚀 Quick Start (Offline Mode)
+## 🎮 Play Online
 
-**Easiest way to play:**
-1. Open `offline.html` in any web browser
-2. Enter your name and choose bot difficulty
-3. Click "Start Game" - you're playing instantly!
+**🌐 [Play Liar's Bar Online](https://jakeglickman1.github.io/Liars-Bar/)**
 
-No server, no setup, no dependencies needed.
+## 🎯 Game Rules
 
-## 🎮 Game Rules
+### Deck Composition
+- **Main Deck**: 20 cards (6x King, 6x Queen, 6x Ace, 2x Joker)
+- **Table Deck**: 3 cards (1x King, 1x Queen, 1x Ace)
+- **Revolver Deck**: Each player gets 6 cards (1x Lethal, 5x Blank)
 
-- **Deck**: 20 cards (6×King, 6×Queen, 6×Ace, 2×Joker)
-- **Players**: 2-8 players, each dealt 5 cards
-- **Round Suit**: One card drawn from table deck (K/Q/A/Joker)
-- **Gameplay**: Play face-down cards declaring they match the Round Suit
-- **LIAR!**: Only the player to your left can call you out
-- **Revolver**: 1/6 chance of elimination when caught lying or falsely accusing
-- **Winner**: Last player standing
+### How to Play
+1. **Setup**: Each player gets 5 cards from the main deck
+2. **Round Card**: One card drawn from table deck determines the "Round Suit"
+3. **Play**: Players take turns playing cards face-down, declaring they match the Round Suit
+4. **Bluffing**: Players can lie about their cards (Jokers are wild)
+5. **LIAR Call**: Any player can call "LIAR!" after a play (except first play of round)
+6. **Russian Roulette**: If LIAR is called:
+   - **Truth**: Accuser spins revolver (1/6 chance of elimination)
+   - **Bluff**: Played player spins revolver
+7. **New Round**: When someone is eliminated or all cards played, everyone gets 5 new cards
+8. **Winner**: Last player standing wins
 
-## 🎯 Game Modes
+## 🚀 Features
 
-### Offline Mode (Recommended)
-- **File**: `offline.html`
-- **Features**: Play against 1-4 AI bots instantly
-- **Difficulty**: Easy/Normal/Hard bot settings
-- **No setup required** - just open in browser
+- **Offline Mode**: Play against AI bots without internet
+- **Modern UI**: Sleek poker table design with animations
+- **AI Difficulty**: Configurable bot difficulty levels
+- **Mobile Friendly**: Responsive design for all devices
+- **Russian Roulette**: 1/6 elimination chance with visual effects
 
-### Online Multiplayer
-- **Server**: Node.js + Socket.IO backend
-- **Client**: React + Tailwind frontend
-- **Features**: Real-time multiplayer, reconnection, lobby system
+## 🎲 Game Mechanics
 
-## 🛠️ Development Setup
+### Card Dealing
+- **5 cards per player** at the start of each round
+- **Fresh hands** every new round
+- **Automatic reshuffle** when decks run out
 
-### Prerequisites
-- Node.js 18+
+### LIAR Calls
+- **Optional calls** - you can choose to call LIAR or continue
+- **Immediate timing** - call LIAR right after a play
+- **Russian Roulette consequences** - high stakes decisions
 
-### Offline Mode
-```bash
-# Just open offline.html in your browser!
-open offline.html
-```
+### AI Behavior
+- **Smart bluffing** based on difficulty settings
+- **Randomized decisions** for unpredictable gameplay
+- **Adaptive strategies** that change with game state
 
-### Online Mode
-```bash
-# Terminal 1 - Server
-cd server
-npm install
-npm run dev
+## 🛠️ Technical Details
 
-# Terminal 2 - Client  
-cd client
-npm install
-npm run dev
-```
+- **Pure HTML/CSS/JavaScript** - no build process required
+- **Self-contained** - single file includes everything
+- **Cross-platform** - works on any modern browser
+- **No dependencies** - runs offline completely
 
-### Standalone HTML (Online)
-```bash
-# Start server first
-cd server && npm run dev
+## 📱 How to Play
 
-# Then open standalone.html
-open client/standalone.html
-```
+1. **Open the game** in your browser
+2. **Add AI players** (2-8 total players)
+3. **Set difficulty** for each bot
+4. **Start the game** and enjoy!
 
-## 📁 Project Structure
+## 🎯 Strategy Tips
 
-```
-├── offline.html          # 🎯 Start here! Offline vs bots
-├── client/
-│   ├── standalone.html   # Online multiplayer (no build)
-│   ├── src/             # React client source
-│   └── package.json
-├── server/
-│   ├── src/             # Node.js server source
-│   ├── __tests__/       # Jest unit tests
-│   └── package.json
-└── README.md
-```
-
-## 🤖 AI Bot Difficulties
-
-- **Easy**: Rarely bluffs (10%), conservative LIAR calls (15%)
-- **Normal**: Moderate bluffing (25%), balanced LIAR calls (35%)
-- **Hard**: Aggressive bluffing (45%), frequent LIAR calls (60%)
-
-## 🎨 Features
-
-- ✅ **Server-authoritative** game logic
-- ✅ **Real-time multiplayer** with Socket.IO
-- ✅ **Reconnection support** with tokens
-- ✅ **AI bots** with configurable difficulty
-- ✅ **Responsive UI** (mobile-friendly)
-- ✅ **Unit tests** for game logic
-- ✅ **Offline mode** for instant play
-
-## 🚀 Deployment
-
-### Server
-Deploy to any Node.js host (Render, Fly.io, Railway):
-```bash
-cd server
-npm run build
-npm start
-```
-
-### Client
-Deploy to static hosting (Vercel, Netlify):
-```bash
-cd client
-npm run build
-# Upload dist/ folder
-```
-
-## 🧪 Testing
-
-```bash
-cd server
-npm test
-```
-
-## 📝 License
-
-MIT License - feel free to fork and modify!
+- **Watch for patterns** in other players' plays
+- **Use Jokers wisely** - they're your wild cards
+- **Call LIAR strategically** - but remember the Russian Roulette risk
+- **Bluff carefully** - getting caught means spinning the revolver
 
 ---
 
-**Ready to play?** Open `offline.html` and start your first game! 🎲
-
+**🎮 Ready to play? [Click here to start!](https://jakeglickman1.github.io/Liars-Bar/)**
