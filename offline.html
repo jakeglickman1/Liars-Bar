@@ -5,34 +5,351 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Last Call Roulette - Offline</title>
   <style>
-    body { font-family: system-ui; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
-    .container { max-width: 800px; margin: 0 auto; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin: 10px 0; }
-    .btn { background: #10b981; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; margin: 4px; }
-    .btn:hover { background: #059669; }
-    .btn.danger { background: #ef4444; }
-    .btn.danger:hover { background: #dc2626; }
-    .btn:disabled { background: #64748b; cursor: not-allowed; }
-    input, select { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 8px; margin: 4px; }
-    .player { display: inline-block; background: #334155; padding: 8px 12px; border-radius: 20px; margin: 4px; }
-    .player.current { background: #059669; }
-    .player.eliminated { opacity: 0.5; }
-    .hand { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-    .card-btn { background: #475569; color: #e2e8f0; border: 1px solid #64748b; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
-    .card-btn:hover { background: #64748b; }
-    .card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .status { background: #1e293b; padding: 12px; border-radius: 8px; margin: 10px 0; }
-    .hidden { display: none; }
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+      background: radial-gradient(ellipse at center, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+      color: #e2e8f0; 
+      margin: 0; 
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+    }
+    
+    .game-table {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at center, #2d5016 0%, #1a3d0a 70%, #0f1f05 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .table-surface {
+      position: relative;
+      width: 90vmin;
+      height: 60vmin;
+      background: radial-gradient(ellipse at center, #1a3d0a 0%, #0f1f05 100%);
+      border: 8px solid #8b4513;
+      border-radius: 50%;
+      box-shadow: 
+        inset 0 0 50px rgba(0,0,0,0.5),
+        0 0 30px rgba(0,0,0,0.8),
+        0 0 0 4px #654321;
+    }
+    
+    .table-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+    }
+    
+    .round-suit {
+      background: rgba(0,0,0,0.8);
+      color: #ffd700;
+      padding: 12px 20px;
+      border-radius: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      border: 2px solid #ffd700;
+      box-shadow: 0 0 20px rgba(255,215,0,0.3);
+    }
+    
+    .phase-indicator {
+      background: rgba(0,0,0,0.6);
+      color: #00ff88;
+      padding: 8px 16px;
+      border-radius: 15px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .player-seat {
+      position: absolute;
+      width: 80px;
+      height: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+    
+    .player-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: white;
+      border: 3px solid #4a5568;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      margin-bottom: 5px;
+    }
+    
+    .player-avatar.current {
+      border-color: #00ff88;
+      box-shadow: 0 0 20px rgba(0,255,136,0.5);
+      animation: pulse 2s infinite;
+    }
+    
+    .player-avatar.eliminated {
+      opacity: 0.3;
+      filter: grayscale(100%);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    .player-name {
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      min-width: 60px;
+    }
+    
+    .player-cards {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 2px;
+    }
+    
+    .card-count {
+      background: rgba(0,0,0,0.9);
+      color: #ffd700;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    
+    /* Position players around the table */
+    .player-seat:nth-child(1) { top: 20px; left: 50%; transform: translateX(-50%); }
+    .player-seat:nth-child(2) { top: 50%; right: 20px; transform: translateY(-50%); }
+    .player-seat:nth-child(3) { bottom: 20px; left: 50%; transform: translateX(-50%); }
+    .player-seat:nth-child(4) { top: 50%; left: 20px; transform: translateY(-50%); }
+    .player-seat:nth-child(5) { top: 15%; right: 25%; }
+    .player-seat:nth-child(6) { bottom: 15%; right: 25%; }
+    .player-seat:nth-child(7) { bottom: 15%; left: 25%; }
+    .player-seat:nth-child(8) { top: 15%; left: 25%; }
+    
+    /* Your hand at the bottom */
+    .your-hand {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.9);
+      padding: 20px;
+      border-radius: 20px;
+      border: 2px solid #4a5568;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    
+    .hand-cards {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      justify-content: center;
+    }
+    
+    .playing-card {
+      width: 60px;
+      height: 84px;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      border: 2px solid #333;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+      color: #333;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .playing-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    }
+    
+    .playing-card.selected {
+      background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+      color: white;
+      transform: translateY(-10px);
+      box-shadow: 0 10px 20px rgba(0,255,136,0.4);
+    }
+    
+    .playing-card:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .playing-card:disabled:hover {
+      transform: none;
+    }
+    
+    .game-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+    }
+    
+    .btn.danger {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+      box-shadow: 0 4px 15px rgba(255,107,107,0.3);
+    }
+    
+    .btn.danger:hover {
+      box-shadow: 0 6px 20px rgba(255,107,107,0.4);
+    }
+    
+    .btn:disabled {
+      background: #64748b;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    select {
+      background: rgba(0,0,0,0.8);
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 15px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+    
+    /* Setup screen */
+    .setup-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .setup-card {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 40px;
+      border-radius: 20px;
+      border: 2px solid #4a5568;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 500px;
+    }
+    
+    .setup-card h1 {
+      color: #ffd700;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+    
+    .setup-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    
+    input {
+      background: rgba(0,0,0,0.8);
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      border-radius: 15px;
+      padding: 12px 16px;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    
+    .hidden { display: none !important; }
+    
+    /* Game over screen */
+    .game-over {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .game-over-card {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 40px;
+      border-radius: 20px;
+      border: 2px solid #ffd700;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+      max-width: 400px;
+    }
+    
+    .game-over-card h2 {
+      color: #ffd700;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🎲 Last Call Roulette - Offline Mode</h1>
-    
-    <div id="setup" class="card">
-      <h3>Quick Start</h3>
-      <p>Play against AI bots instantly - no server needed!</p>
-      <div>
+  <!-- Setup Screen -->
+  <div id="setup" class="setup-screen">
+    <div class="setup-card">
+      <h1>🎲 Last Call Roulette</h1>
+      <p style="color: #a0aec0; margin-bottom: 30px;">Play against AI bots at the poker table</p>
+      
+      <div class="setup-controls">
         <input id="playerName" placeholder="Your name" value="You">
         <select id="botCount">
           <option value="1">1 Bot</option>
@@ -45,30 +362,40 @@
           <option value="normal" selected>Normal</option>
           <option value="hard">Hard</option>
         </select>
-        <button class="btn" onclick="startGame()">Start Game</button>
       </div>
+      
+      <button class="btn" onclick="startGame()" style="font-size: 18px; padding: 15px 30px;">Join the Table</button>
     </div>
+  </div>
 
-    <div id="game" class="card hidden">
-      <div class="status">
-        <strong>Round Suit:</strong> <span id="roundSuit">-</span> | 
-        <strong>Phase:</strong> <span id="phase">-</span> |
-        <strong>Turn:</strong> <span id="currentPlayer">-</span>
+  <!-- Game Table -->
+  <div id="game" class="game-table hidden">
+    <div class="table-surface">
+      <!-- Table Center Info -->
+      <div class="table-center">
+        <div class="round-suit">Round Suit: <span id="roundSuit">-</span></div>
+        <div class="phase-indicator">Phase: <span id="phase">-</span></div>
       </div>
       
+      <!-- Player Seats -->
       <div id="players"></div>
-      
-      <div id="yourHand" class="hidden">
-        <h4>Your Hand</h4>
-        <div id="hand" class="hand"></div>
+    </div>
+    
+    <!-- Your Hand -->
+    <div id="yourHand" class="your-hand hidden">
+      <div class="hand-cards" id="hand"></div>
+      <div class="game-controls">
         <button class="btn danger" id="liarBtn" onclick="callLiar()" disabled>Call LIAR!</button>
       </div>
-      
-      <div id="gameOver" class="hidden">
-        <h3>🎉 Game Over!</h3>
-        <p id="winnerText"></p>
-        <button class="btn" onclick="resetGame()">New Game</button>
-      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="gameOver" class="game-over hidden">
+    <div class="game-over-card">
+      <h2>🎉 Game Over!</h2>
+      <p id="winnerText" style="color: #a0aec0; margin-bottom: 30px;"></p>
+      <button class="btn" onclick="resetGame()">New Game</button>
     </div>
   </div>
 
@@ -173,16 +500,35 @@
       document.getElementById('phase').textContent = gameState.phase;
       document.getElementById('currentPlayer').textContent = currentPlayer?.name || '-';
 
-      // Update players display
+      // Update players display around the table
       const playersDiv = document.getElementById('players');
       playersDiv.innerHTML = '';
-      gameState.players.forEach(player => {
-        const div = document.createElement('div');
-        div.className = 'player';
-        if (currentPlayer && player.id === currentPlayer.id) div.classList.add('current');
-        if (player.eliminated) div.classList.add('eliminated');
-        div.textContent = `${player.name} (${player.hand.length} cards)`;
-        playersDiv.appendChild(div);
+      gameState.players.forEach((player, index) => {
+        const seat = document.createElement('div');
+        seat.className = 'player-seat';
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'player-avatar';
+        if (currentPlayer && player.id === currentPlayer.id) avatar.classList.add('current');
+        if (player.eliminated) avatar.classList.add('eliminated');
+        avatar.textContent = player.name.charAt(0).toUpperCase();
+        
+        const name = document.createElement('div');
+        name.className = 'player-name';
+        name.textContent = player.name;
+        
+        const cardCount = document.createElement('div');
+        cardCount.className = 'card-count';
+        cardCount.textContent = player.hand.length;
+        
+        const cards = document.createElement('div');
+        cards.className = 'player-cards';
+        cards.appendChild(cardCount);
+        
+        seat.appendChild(avatar);
+        seat.appendChild(name);
+        seat.appendChild(cards);
+        playersDiv.appendChild(seat);
       });
 
       // Update your hand
@@ -193,22 +539,25 @@
         handDiv.innerHTML = '';
         
         player.hand.forEach(card => {
-          const btn = document.createElement('button');
+          const cardEl = document.createElement('div');
           const isSelected = selectedCards.find(c => c.id === card.id);
-          btn.className = isSelected ? 'card-btn' : 'card-btn';
-          btn.style.background = isSelected ? '#059669' : '#475569';
-          btn.textContent = card.rank;
-          btn.disabled = gameState.phase !== 'playing' || currentPlayer.id !== 'player';
-          btn.onclick = () => playCard(card);
-          handDiv.appendChild(btn);
+          cardEl.className = 'playing-card';
+          if (isSelected) cardEl.classList.add('selected');
+          cardEl.textContent = card.rank;
+          cardEl.disabled = gameState.phase !== 'playing' || currentPlayer.id !== 'player';
+          if (!cardEl.disabled) {
+            cardEl.onclick = () => playCard(card);
+          }
+          handDiv.appendChild(cardEl);
         });
 
         // Add suit selection and confirm button
         if (gameState.phase === 'playing' && currentPlayer.id === 'player' && selectedCards.length > 0) {
-          const suitDiv = document.createElement('div');
-          suitDiv.style.margin = '10px 0';
-          suitDiv.innerHTML = `
-            <label>Declare suit: </label>
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'game-controls';
+          controlsDiv.style.marginTop = '15px';
+          controlsDiv.innerHTML = `
+            <label style="color: #a0aec0; margin-right: 10px;">Declare suit:</label>
             <select id="suitSelect" onchange="declaredSuit = this.value">
               <option value="">Round Suit (${gameState.currentRoundSuit})</option>
               <option value="K">King</option>
@@ -218,7 +567,7 @@
             </select>
             <button class="btn" onclick="confirmPlay()">Play ${selectedCards.length} Card${selectedCards.length > 1 ? 's' : ''}</button>
           `;
-          handDiv.appendChild(suitDiv);
+          handDiv.appendChild(controlsDiv);
         }
 
         // Update LIAR button
