@@ -87,9 +87,9 @@
 
     const CARD_RANKS = ['K', 'Q', 'A', 'JOKER'];
     const DIFFICULTY_SETTINGS = {
-      easy: { bluffChance: 0.1, liarChance: 0.15 },
-      normal: { bluffChance: 0.25, liarChance: 0.35 },
-      hard: { bluffChance: 0.45, liarChance: 0.6 }
+      easy: { bluffChance: 0.1, liarChance: 0.15, randomness: 0.3 },
+      normal: { bluffChance: 0.25, liarChance: 0.35, randomness: 0.5 },
+      hard: { bluffChance: 0.45, liarChance: 0.6, randomness: 0.7 }
     };
 
     function createDeck() {
@@ -194,12 +194,32 @@
         
         player.hand.forEach(card => {
           const btn = document.createElement('button');
-          btn.className = 'card-btn';
+          const isSelected = selectedCards.find(c => c.id === card.id);
+          btn.className = isSelected ? 'card-btn' : 'card-btn';
+          btn.style.background = isSelected ? '#059669' : '#475569';
           btn.textContent = card.rank;
           btn.disabled = gameState.phase !== 'playing' || currentPlayer.id !== 'player';
           btn.onclick = () => playCard(card);
           handDiv.appendChild(btn);
         });
+
+        // Add suit selection and confirm button
+        if (gameState.phase === 'playing' && currentPlayer.id === 'player' && selectedCards.length > 0) {
+          const suitDiv = document.createElement('div');
+          suitDiv.style.margin = '10px 0';
+          suitDiv.innerHTML = `
+            <label>Declare suit: </label>
+            <select id="suitSelect" onchange="declaredSuit = this.value">
+              <option value="">Round Suit (${gameState.currentRoundSuit})</option>
+              <option value="K">King</option>
+              <option value="Q">Queen</option>
+              <option value="A">Ace</option>
+              <option value="JOKER">Joker</option>
+            </select>
+            <button class="btn" onclick="confirmPlay()">Play ${selectedCards.length} Card${selectedCards.length > 1 ? 's' : ''}</button>
+          `;
+          handDiv.appendChild(suitDiv);
+        }
 
         // Update LIAR button
         const liarBtn = document.getElementById('liarBtn');
@@ -217,24 +237,46 @@
       }
     }
 
+    let selectedCards = [];
+    let declaredSuit = null;
+
     function playCard(card) {
       const player = gameState.players.find(p => p.id === 'player');
       if (!player || gameState.phase !== 'playing') return;
 
-      const cardIndex = player.hand.findIndex(c => c.id === card.id);
-      if (cardIndex === -1) return;
+      // Toggle card selection
+      const cardIndex = selectedCards.findIndex(c => c.id === card.id);
+      if (cardIndex === -1) {
+        selectedCards.push(card);
+      } else {
+        selectedCards.splice(cardIndex, 1);
+      }
+      updateUI();
+    }
 
-      const playedCard = player.hand.splice(cardIndex, 1)[0];
-      gameState.lastPlayed = playedCard;
+    function confirmPlay() {
+      if (selectedCards.length === 0) return;
       
-      // For simplicity, always declare the round suit (you can bluff by playing a different card)
-      const declared = gameState.currentRoundSuit;
-      gameState.tableCards.push({
-        playerId: 'player',
-        cardId: playedCard.id,
-        declared
+      const player = gameState.players.find(p => p.id === 'player');
+      if (!player || gameState.phase !== 'playing') return;
+
+      // Remove selected cards from hand
+      selectedCards.forEach(card => {
+        const cardIndex = player.hand.findIndex(c => c.id === card.id);
+        if (cardIndex !== -1) {
+          const playedCard = player.hand.splice(cardIndex, 1)[0];
+          gameState.lastPlayed = playedCard; // Store the last card for reveal
+          
+          gameState.tableCards.push({
+            playerId: 'player',
+            cardId: playedCard.id,
+            declared: declaredSuit || gameState.currentRoundSuit
+          });
+        }
       });
 
+      selectedCards = [];
+      declaredSuit = null;
       gameState.phase = 'reveal';
       updateUI();
       
@@ -314,29 +356,53 @@
       if (!currentPlayer.isBot) return;
 
       if (gameState.phase === 'playing') {
-        // Bot plays a card
+        // Bot plays cards
         const bot = currentPlayer;
         if (bot.hand.length === 0) return;
 
-        // Simple bot strategy: prefer matching cards, otherwise random
-        const roundSuit = gameState.currentRoundSuit;
-        const matchingCard = bot.hand.find(c => c.rank === roundSuit || c.rank === 'JOKER');
-        const cardToPlay = matchingCard || bot.hand[Math.floor(Math.random() * bot.hand.length)];
-        
-        const cardIndex = bot.hand.findIndex(c => c.id === cardToPlay.id);
-        const playedCard = bot.hand.splice(cardIndex, 1)[0];
-        gameState.lastPlayed = playedCard;
-        
-        // Bot declares the round suit (can bluff based on difficulty)
         const settings = DIFFICULTY_SETTINGS[bot.difficulty];
-        const shouldBluff = Math.random() < settings.bluffChance;
-        const declared = shouldBluff && playedCard.rank !== roundSuit ? 
-          CARD_RANKS[Math.floor(Math.random() * 3)] : roundSuit;
+        const roundSuit = gameState.currentRoundSuit;
         
-        gameState.tableCards.push({
-          playerId: bot.id,
-          cardId: playedCard.id,
-          declared
+        // Determine how many cards to play (1-3, with randomness)
+        const maxCards = Math.min(3, bot.hand.length);
+        const cardCount = Math.random() < settings.randomness ? 
+          Math.floor(Math.random() * maxCards) + 1 : 1;
+        
+        // Select cards to play
+        const cardsToPlay = [];
+        const matchingCards = bot.hand.filter(c => c.rank === roundSuit || c.rank === 'JOKER');
+        
+        // Prefer matching cards, but add randomness
+        if (matchingCards.length > 0 && Math.random() > settings.randomness) {
+          cardsToPlay.push(...matchingCards.slice(0, Math.min(cardCount, matchingCards.length)));
+        }
+        
+        // Fill remaining slots with random cards
+        while (cardsToPlay.length < cardCount && cardsToPlay.length < bot.hand.length) {
+          const remainingCards = bot.hand.filter(c => !cardsToPlay.includes(c));
+          if (remainingCards.length > 0) {
+            cardsToPlay.push(remainingCards[Math.floor(Math.random() * remainingCards.length)]);
+          }
+        }
+        
+        // Play the selected cards
+        cardsToPlay.forEach(card => {
+          const cardIndex = bot.hand.findIndex(c => c.id === card.id);
+          if (cardIndex !== -1) {
+            const playedCard = bot.hand.splice(cardIndex, 1)[0];
+            gameState.lastPlayed = playedCard; // Store last card for reveal
+            
+            // Bot declares suit (can bluff based on difficulty)
+            const shouldBluff = Math.random() < settings.bluffChance;
+            const declared = shouldBluff && playedCard.rank !== roundSuit ? 
+              CARD_RANKS[Math.floor(Math.random() * 3)] : roundSuit;
+            
+            gameState.tableCards.push({
+              playerId: bot.id,
+              cardId: playedCard.id,
+              declared
+            });
+          }
         });
 
         gameState.phase = 'reveal';
@@ -369,7 +435,20 @@
       if (!leftPlayer || !leftPlayer.isBot) return;
 
       const settings = DIFFICULTY_SETTINGS[leftPlayer.difficulty];
-      const shouldCallLiar = Math.random() < settings.liarChance;
+      
+      // Add more randomness to liar calls
+      let liarChance = settings.liarChance;
+      
+      // Random factor that can make bots more or less aggressive
+      const randomFactor = (Math.random() - 0.5) * settings.randomness;
+      liarChance = Math.max(0, Math.min(1, liarChance + randomFactor));
+      
+      // Sometimes bots make completely random decisions
+      if (Math.random() < settings.randomness * 0.3) {
+        liarChance = Math.random();
+      }
+      
+      const shouldCallLiar = Math.random() < liarChance;
       
       if (shouldCallLiar) {
         resolveLiarCall(leftPlayer.id);
@@ -393,6 +472,9 @@
         tableCards: [],
         lastPlayed: null
       };
+      
+      selectedCards = [];
+      declaredSuit = null;
       
       document.getElementById('game').classList.add('hidden');
       document.getElementById('setup').classList.remove('hidden');
