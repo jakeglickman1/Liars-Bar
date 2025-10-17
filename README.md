@@ -130,3 +130,4 @@ MIT License - feel free to fork and modify!
 ---
 
 **Ready to play?** Open `offline.html` and start your first game! 🎲
+
