@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Last Call Roulette - Standalone</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; }
+      .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .btn { background:#10b981; color:#071018; padding:8px 12px; border:none; border-radius:8px; cursor:pointer; }
+      .btn.secondary { background:#3b82f6; color:white; }
+      .btn.warn { background:#ef4444; color:white; }
+      .btn.muted { background:#334155; color:#cbd5e1; }
+      input, select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:8px 10px; }
+      .pill { background:#0b1220; border:1px solid #334155; border-radius:999px; padding:6px 10px; }
+      .card { background:#0b1220; border:1px solid #334155; border-radius:10px; padding:12px; }
+      .player { padding:6px 10px; border-radius:8px; background:#0b1220; border:1px solid #334155; }
+      .player.turn { background:#047857; border-color:#047857; color:white; }
+      .hand button { background:#0b1220; border:1px solid #334155; border-radius:8px; color:#e2e8f0; padding:8px 12px; }
+      .hand button:disabled { opacity: 0.5; }
+      .muted { opacity: .7 }
+    </style>
+    <script src="https://unpkg.com/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Last Call Roulette (Standalone)</h1>
+      <div class="card" style="margin-bottom:12px">
+        <div class="row" style="margin-bottom:8px">
+          <label>Server URL</label>
+          <input id="serverUrl" size="32" value="http://localhost:3001" />
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <input id="name" placeholder="Your name" value="You" />
+          <button class="btn" id="createBtn">Create</button>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <input id="gameId" placeholder="Game ID" />
+          <button class="btn secondary" id="joinBtn">Join</button>
+        </div>
+        <div class="row">
+          <label class="muted">Bot difficulty</label>
+          <select id="difficulty">
+            <option value="easy">easy</option>
+            <option value="normal" selected>normal</option>
+            <option value="hard">hard</option>
+          </select>
+          <button class="btn muted" id="addBotBtn" disabled>Add Bot</button>
+          <button class="btn muted" id="clearBotsBtn" disabled>Remove Bots</button>
+        </div>
+      </div>
+
+      <div id="lobby" class="card" style="display:none; margin-bottom:12px"></div>
+
+      <div id="table" class="card" style="display:none">
+        <div class="row">
+          <div class="pill">Round Suit: <b id="roundSuit">-</b></div>
+          <div class="pill">Phase: <span id="phase">-</span></div>
+          <div class="pill" id="winner" style="display:none"></div>
+          <button class="btn secondary" id="startBtn" disabled>Start</button>
+          <button class="btn warn" id="liarBtn" disabled>Call LIAR!</button>
+        </div>
+        <div class="row" id="players" style="margin-top:10px"></div>
+        <div style="margin-top:12px">
+          <div class="muted" style="margin-bottom:6px">Your hand</div>
+          <div class="row hand" id="hand"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /** Types (for reference)
+       * CardRank: 'K'|'Q'|'A'|'JOKER'
+       * GameState { players[], table:{ currentRoundSuit, tableCards }, phase, turnIndex, winnerId }
+       */
+      let socket = null;
+      let bots = [];
+      let state = null;
+
+      const $ = (id) => document.getElementById(id);
+      const ui = {
+        serverUrl: $('serverUrl'), name: $('name'), gameId: $('gameId'),
+        createBtn: $('createBtn'), joinBtn: $('joinBtn'),
+        difficulty: $('difficulty'), addBotBtn: $('addBotBtn'), clearBotsBtn: $('clearBotsBtn'),
+        lobby: $('lobby'), table: $('table'), startBtn: $('startBtn'), liarBtn: $('liarBtn'),
+        roundSuit: $('roundSuit'), phase: $('phase'), winner: $('winner'),
+        players: $('players'), hand: $('hand')
+      };
+
+      function connectIfNeeded() {
+        if (socket && socket.connected) return;
+        socket = io(ui.serverUrl.value, { transports: ['websocket'] });
+        socket.on('connect', () => console.log('connected', socket.id));
+        socket.on('state', (s) => { state = s; render(); botMaybeActAll(); });
+      }
+
+      function render() {
+        if (!state) {
+          ui.lobby.style.display = 'none';
+          ui.table.style.display = 'none';
+          ui.addBotBtn.disabled = !ui.gameId.value;
+          ui.clearBotsBtn.disabled = bots.length===0;
+          return;
+        }
+
+        const inLobby = state.phase === 'lobby';
+        ui.lobby.style.display = inLobby ? 'block' : 'none';
+        ui.table.style.display = 'block';
+        ui.addBotBtn.disabled = !ui.gameId.value;
+        ui.clearBotsBtn.disabled = bots.length===0;
+
+        ui.roundSuit.textContent = state.table.currentRoundSuit || '-';
+        ui.phase.textContent = state.phase;
+        if (state.winnerId) {
+          ui.winner.style.display = 'inline-block';
+          const w = state.players.find(p=>p.id===state.winnerId)?.name || 'Winner';
+          ui.winner.textContent = 'Winner: ' + w;
+        } else ui.winner.style.display = 'none';
+
+        // players
+        ui.players.innerHTML = '';
+        const alive = state.players.filter(p=>!p.eliminated);
+        const cur = alive[state.turnIndex % alive.length];
+        for (const p of state.players) {
+          const div = document.createElement('div');
+          div.className = 'player' + (cur && cur.id===p.id ? ' turn' : '') + (!p.eliminated? '':' muted');
+          div.textContent = p.name + (p.id===socket.id?' (you)':'');
+          ui.players.appendChild(div);
+        }
+
+        ui.startBtn.disabled = !(inLobby && state.players.length>=2);
+
+        // my hand
+        ui.hand.innerHTML = '';
+        const me = state.players.find(p=>p.id===socket.id);
+        if (me) {
+          const myTurn = cur && cur.id===me.id && state.phase==='playing';
+          for (const c of me.hand) {
+            const b = document.createElement('button');
+            b.textContent = c.rank;
+            b.disabled = !myTurn;
+            b.onclick = () => {
+              const declared = state.table.currentRoundSuit || 'K';
+              socket.emit('play', { cardId: c.id, declared }, ()=>{});
+            };
+            ui.hand.appendChild(b);
+          }
+        }
+
+        // liar button
+        const leftId = leftPlayerId(state);
+        ui.liarBtn.disabled = !(state.phase==='reveal' && leftId && leftId===socket.id);
+      }
+
+      function leftPlayerId(s) {
+        const alive = s.players.filter(p=>!p.eliminated);
+        const cur = alive[s.turnIndex % alive.length];
+        const curIdx = alive.findIndex(p=>p.id===cur.id);
+        const leftIdx = (curIdx - 1 + alive.length) % alive.length;
+        return alive[leftIdx]?.id;
+      }
+
+      // Simple in-page bot client
+      function spawnBot(difficulty) {
+        const url = ui.serverUrl.value;
+        const bot = { socket: io(url, { transports:['websocket'] }), difficulty };
+        const name = 'Bot-' + Math.floor(Math.random()*9999);
+        bot.socket.on('connect', () => {
+          bot.socket.emit('joinGame', { gameId: ui.gameId.value, name, isBot: true }, ()=>{});
+        });
+        bot.socket.on('state', (s) => {
+          // act if my turn
+          try {
+            const alive = s.players.filter(p=>!p.eliminated);
+            const cur = alive[s.turnIndex % alive.length];
+            const me = s.players.find(p=>p.id===bot.socket.id);
+            if (!me) return;
+            if (s.phase==='reveal') {
+              const leftId = (function(){
+                const curIdx = alive.findIndex(p=>p.id===cur.id);
+                const leftIdx = (curIdx - 1 + alive.length) % alive.length;
+                return alive[leftIdx]?.id;
+              })();
+              if (leftId===me.id) {
+                const base = bot.difficulty==='easy'?0.15:bot.difficulty==='normal'?0.35:0.6;
+                if (Math.random()<base) bot.socket.emit('liar', {}, ()=>{});
+              }
+            }
+            if (s.phase!=='playing') return;
+            if (cur && cur.id===me.id) {
+              const rs = s.table.currentRoundSuit;
+              const match = me.hand.find(c=>c.rank===rs || c.rank==='JOKER');
+              const card = match || me.hand[0];
+              if (!card) return;
+              const declared = rs || 'K';
+              bot.socket.emit('play', { cardId: card.id, declared }, ()=>{});
+            }
+          } catch (e) {}
+        });
+        return bot;
+      }
+
+      function botMaybeActAll(){ /* actions run in socket 'state' handlers */ }
+
+      // UI events
+      ui.createBtn.onclick = () => {
+        connectIfNeeded();
+        socket.emit('createGame', { name: ui.name.value }, (res) => {
+          if (res?.error) return alert(res.error);
+          ui.gameId.value = res.gameId;
+          state = res.state; render();
+          ui.addBotBtn.disabled = false;
+        });
+      };
+      ui.joinBtn.onclick = () => {
+        if (!ui.gameId.value) return alert('Enter Game ID');
+        connectIfNeeded();
+        socket.emit('joinGame', { gameId: ui.gameId.value, name: ui.name.value }, (res) => {
+          if (res?.error) return alert(res.error);
+          state = res.state; render();
+          ui.addBotBtn.disabled = false;
+        });
+      };
+      ui.startBtn.onclick = () => socket.emit('start', {}, ()=>{});
+      ui.liarBtn.onclick = () => socket.emit('liar', {}, ()=>{});
+      ui.addBotBtn.onclick = () => {
+        if (!ui.gameId.value) return;
+        const bot = spawnBot(ui.difficulty.value);
+        bots.push(bot);
+        ui.clearBotsBtn.disabled = bots.length===0 ? true : false;
+      };
+      ui.clearBotsBtn.onclick = () => {
+        bots.forEach(b=>b.socket.disconnect());
+        bots = [];
+        ui.clearBotsBtn.disabled = true;
+      };
+    </script>
+  </body>
+  </html>
+

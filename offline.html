@@ -1,0 +1,403 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Last Call Roulette - Offline</title>
+  <style>
+    body { font-family: system-ui; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin: 10px 0; }
+    .btn { background: #10b981; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; margin: 4px; }
+    .btn:hover { background: #059669; }
+    .btn.danger { background: #ef4444; }
+    .btn.danger:hover { background: #dc2626; }
+    .btn:disabled { background: #64748b; cursor: not-allowed; }
+    input, select { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 8px; margin: 4px; }
+    .player { display: inline-block; background: #334155; padding: 8px 12px; border-radius: 20px; margin: 4px; }
+    .player.current { background: #059669; }
+    .player.eliminated { opacity: 0.5; }
+    .hand { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .card-btn { background: #475569; color: #e2e8f0; border: 1px solid #64748b; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+    .card-btn:hover { background: #64748b; }
+    .card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { background: #1e293b; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎲 Last Call Roulette - Offline Mode</h1>
+    
+    <div id="setup" class="card">
+      <h3>Quick Start</h3>
+      <p>Play against AI bots instantly - no server needed!</p>
+      <div>
+        <input id="playerName" placeholder="Your name" value="You">
+        <select id="botCount">
+          <option value="1">1 Bot</option>
+          <option value="2" selected>2 Bots</option>
+          <option value="3">3 Bots</option>
+          <option value="4">4 Bots</option>
+        </select>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+        <button class="btn" onclick="startGame()">Start Game</button>
+      </div>
+    </div>
+
+    <div id="game" class="card hidden">
+      <div class="status">
+        <strong>Round Suit:</strong> <span id="roundSuit">-</span> | 
+        <strong>Phase:</strong> <span id="phase">-</span> |
+        <strong>Turn:</strong> <span id="currentPlayer">-</span>
+      </div>
+      
+      <div id="players"></div>
+      
+      <div id="yourHand" class="hidden">
+        <h4>Your Hand</h4>
+        <div id="hand" class="hand"></div>
+        <button class="btn danger" id="liarBtn" onclick="callLiar()" disabled>Call LIAR!</button>
+      </div>
+      
+      <div id="gameOver" class="hidden">
+        <h3>🎉 Game Over!</h3>
+        <p id="winnerText"></p>
+        <button class="btn" onclick="resetGame()">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Game state
+    let gameState = {
+      players: [],
+      deck: [],
+      tableDeck: [],
+      currentRoundSuit: null,
+      turnIndex: 0,
+      phase: 'lobby', // lobby, playing, reveal, ended
+      tableCards: [],
+      lastPlayed: null
+    };
+
+    const CARD_RANKS = ['K', 'Q', 'A', 'JOKER'];
+    const DIFFICULTY_SETTINGS = {
+      easy: { bluffChance: 0.1, liarChance: 0.15 },
+      normal: { bluffChance: 0.25, liarChance: 0.35 },
+      hard: { bluffChance: 0.45, liarChance: 0.6 }
+    };
+
+    function createDeck() {
+      const deck = [];
+      // 6 of each K, Q, A
+      for (const rank of ['K', 'Q', 'A']) {
+        for (let i = 0; i < 6; i++) {
+          deck.push({ id: Math.random().toString(36), rank });
+        }
+      }
+      // 2 Jokers
+      for (let i = 0; i < 2; i++) {
+        deck.push({ id: Math.random().toString(36), rank: 'JOKER' });
+      }
+      return shuffle(deck);
+    }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function createTableDeck() {
+      return shuffle(['K', 'Q', 'A', 'JOKER']);
+    }
+
+    function startGame() {
+      const playerName = document.getElementById('playerName').value || 'You';
+      const botCount = parseInt(document.getElementById('botCount').value);
+      const difficulty = document.getElementById('difficulty').value;
+
+      // Create players
+      gameState.players = [
+        { id: 'player', name: playerName, hand: [], isBot: false, eliminated: false }
+      ];
+      
+      for (let i = 0; i < botCount; i++) {
+        gameState.players.push({
+          id: `bot${i}`,
+          name: `Bot-${['Fox', 'Wolf', 'Bear', 'Hawk'][i] || 'Bot'}`,
+          hand: [],
+          isBot: true,
+          difficulty,
+          eliminated: false
+        });
+      }
+
+      // Setup game
+      gameState.deck = createDeck();
+      gameState.tableDeck = createTableDeck();
+      gameState.currentRoundSuit = gameState.tableDeck.pop();
+      gameState.turnIndex = 0;
+      gameState.phase = 'playing';
+      gameState.tableCards = [];
+
+      // Deal cards
+      for (let round = 0; round < 5; round++) {
+        for (const player of gameState.players) {
+          const card = gameState.deck.pop();
+          if (card) player.hand.push(card);
+        }
+      }
+
+      document.getElementById('setup').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+      updateUI();
+      
+      // Start bot turns if needed
+      setTimeout(() => botTurn(), 1000);
+    }
+
+    function updateUI() {
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
+      
+      document.getElementById('roundSuit').textContent = gameState.currentRoundSuit || '-';
+      document.getElementById('phase').textContent = gameState.phase;
+      document.getElementById('currentPlayer').textContent = currentPlayer?.name || '-';
+
+      // Update players display
+      const playersDiv = document.getElementById('players');
+      playersDiv.innerHTML = '';
+      gameState.players.forEach(player => {
+        const div = document.createElement('div');
+        div.className = 'player';
+        if (currentPlayer && player.id === currentPlayer.id) div.classList.add('current');
+        if (player.eliminated) div.classList.add('eliminated');
+        div.textContent = `${player.name} (${player.hand.length} cards)`;
+        playersDiv.appendChild(div);
+      });
+
+      // Update your hand
+      const player = gameState.players.find(p => p.id === 'player');
+      if (player && !player.eliminated) {
+        document.getElementById('yourHand').classList.remove('hidden');
+        const handDiv = document.getElementById('hand');
+        handDiv.innerHTML = '';
+        
+        player.hand.forEach(card => {
+          const btn = document.createElement('button');
+          btn.className = 'card-btn';
+          btn.textContent = card.rank;
+          btn.disabled = gameState.phase !== 'playing' || currentPlayer.id !== 'player';
+          btn.onclick = () => playCard(card);
+          handDiv.appendChild(btn);
+        });
+
+        // Update LIAR button
+        const liarBtn = document.getElementById('liarBtn');
+        const canCallLiar = gameState.phase === 'reveal' && isLeftPlayer('player');
+        liarBtn.disabled = !canCallLiar;
+      } else {
+        document.getElementById('yourHand').classList.add('hidden');
+      }
+
+      // Check for game over
+      if (gameState.phase === 'ended') {
+        document.getElementById('gameOver').classList.remove('hidden');
+        const winner = gameState.players.find(p => p.id === gameState.winnerId);
+        document.getElementById('winnerText').textContent = `🎉 ${winner?.name} wins!`;
+      }
+    }
+
+    function playCard(card) {
+      const player = gameState.players.find(p => p.id === 'player');
+      if (!player || gameState.phase !== 'playing') return;
+
+      const cardIndex = player.hand.findIndex(c => c.id === card.id);
+      if (cardIndex === -1) return;
+
+      const playedCard = player.hand.splice(cardIndex, 1)[0];
+      gameState.lastPlayed = playedCard;
+      
+      // For simplicity, always declare the round suit (you can bluff by playing a different card)
+      const declared = gameState.currentRoundSuit;
+      gameState.tableCards.push({
+        playerId: 'player',
+        cardId: playedCard.id,
+        declared
+      });
+
+      gameState.phase = 'reveal';
+      updateUI();
+      
+      // Bot can call liar after a delay
+      setTimeout(() => {
+        if (gameState.phase === 'reveal') {
+          botCallLiar();
+        }
+      }, 2000);
+    }
+
+    function callLiar() {
+      if (gameState.phase !== 'reveal' || !isLeftPlayer('player')) return;
+      resolveLiarCall('player');
+    }
+
+    function isLeftPlayer(playerId) {
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentIndex = alivePlayers.findIndex(p => p.id === gameState.players[gameState.turnIndex % gameState.players.length].id);
+      const leftIndex = (currentIndex - 1 + alivePlayers.length) % alivePlayers.length;
+      return alivePlayers[leftIndex]?.id === playerId;
+    }
+
+    function resolveLiarCall(callerId) {
+      if (!gameState.lastPlayed) return;
+
+      const lastPlay = gameState.tableCards[gameState.tableCards.length - 1];
+      const declared = lastPlay.declared;
+      const actual = gameState.lastPlayed.rank;
+      
+      // Check if it was truth or bluff
+      const isTruth = actual === declared || actual === 'JOKER' || gameState.currentRoundSuit === 'JOKER';
+      const spinner = isTruth ? callerId : lastPlay.playerId;
+      
+      // Spin the revolver (1/6 chance)
+      const eliminated = Math.floor(Math.random() * 6) === 0;
+      
+      if (eliminated) {
+        const player = gameState.players.find(p => p.id === spinner);
+        if (player) player.eliminated = true;
+        
+        // Check for winner
+        const survivors = gameState.players.filter(p => !p.eliminated);
+        if (survivors.length === 1) {
+          gameState.winnerId = survivors[0].id;
+          gameState.phase = 'ended';
+        }
+      }
+
+      // Advance turn
+      if (gameState.phase !== 'ended') {
+        gameState.phase = 'playing';
+        gameState.turnIndex = (gameState.turnIndex + 1) % gameState.players.filter(p => !p.eliminated).length;
+        
+        // Check if all hands are empty
+        const allEmpty = gameState.players.filter(p => !p.eliminated).every(p => p.hand.length === 0);
+        if (allEmpty) {
+          gameState.winnerId = gameState.players.filter(p => !p.eliminated)[0].id;
+          gameState.phase = 'ended';
+        }
+      }
+
+      updateUI();
+      
+      // Continue with bot turns
+      if (gameState.phase === 'playing') {
+        setTimeout(() => botTurn(), 1000);
+      }
+    }
+
+    function botTurn() {
+      if (gameState.phase === 'ended') return;
+      
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentPlayer = alivePlayers[gameState.turnIndex % alivePlayers.length];
+      
+      if (!currentPlayer.isBot) return;
+
+      if (gameState.phase === 'playing') {
+        // Bot plays a card
+        const bot = currentPlayer;
+        if (bot.hand.length === 0) return;
+
+        // Simple bot strategy: prefer matching cards, otherwise random
+        const roundSuit = gameState.currentRoundSuit;
+        const matchingCard = bot.hand.find(c => c.rank === roundSuit || c.rank === 'JOKER');
+        const cardToPlay = matchingCard || bot.hand[Math.floor(Math.random() * bot.hand.length)];
+        
+        const cardIndex = bot.hand.findIndex(c => c.id === cardToPlay.id);
+        const playedCard = bot.hand.splice(cardIndex, 1)[0];
+        gameState.lastPlayed = playedCard;
+        
+        // Bot declares the round suit (can bluff based on difficulty)
+        const settings = DIFFICULTY_SETTINGS[bot.difficulty];
+        const shouldBluff = Math.random() < settings.bluffChance;
+        const declared = shouldBluff && playedCard.rank !== roundSuit ? 
+          CARD_RANKS[Math.floor(Math.random() * 3)] : roundSuit;
+        
+        gameState.tableCards.push({
+          playerId: bot.id,
+          cardId: playedCard.id,
+          declared
+        });
+
+        gameState.phase = 'reveal';
+        updateUI();
+        
+        // Check if player can call liar
+        setTimeout(() => {
+          if (gameState.phase === 'reveal' && isLeftPlayer('player')) {
+            // Player can call liar - wait for their input
+            return;
+          } else {
+            // Bot calls liar or continues
+            botCallLiar();
+          }
+        }, 2000);
+        
+      } else if (gameState.phase === 'reveal') {
+        botCallLiar();
+      }
+    }
+
+    function botCallLiar() {
+      if (gameState.phase !== 'reveal') return;
+      
+      const alivePlayers = gameState.players.filter(p => !p.eliminated);
+      const currentIndex = alivePlayers.findIndex(p => p.id === gameState.players[gameState.turnIndex % gameState.players.length].id);
+      const leftIndex = (currentIndex - 1 + alivePlayers.length) % alivePlayers.length;
+      const leftPlayer = alivePlayers[leftIndex];
+      
+      if (!leftPlayer || !leftPlayer.isBot) return;
+
+      const settings = DIFFICULTY_SETTINGS[leftPlayer.difficulty];
+      const shouldCallLiar = Math.random() < settings.liarChance;
+      
+      if (shouldCallLiar) {
+        resolveLiarCall(leftPlayer.id);
+      } else {
+        // No liar call, continue to next turn
+        gameState.phase = 'playing';
+        gameState.turnIndex = (gameState.turnIndex + 1) % alivePlayers.length;
+        updateUI();
+        setTimeout(() => botTurn(), 1000);
+      }
+    }
+
+    function resetGame() {
+      gameState = {
+        players: [],
+        deck: [],
+        tableDeck: [],
+        currentRoundSuit: null,
+        turnIndex: 0,
+        phase: 'lobby',
+        tableCards: [],
+        lastPlayed: null
+      };
+      
+      document.getElementById('game').classList.add('hidden');
+      document.getElementById('setup').classList.remove('hidden');
+      document.getElementById('gameOver').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
